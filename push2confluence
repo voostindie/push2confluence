@@ -1,0 +1,96 @@
+#!/Users/vincent/.rbenv/shims/ruby
+SETTINGS = File.join(Dir.home, '.confluence')
+unless File.exist?(SETTINGS)
+  $stderr.puts <<EOF
+Missing the program settings in #{SETTINGS}
+
+Here's a template:
+
+  CONFLUENCE_SERVER = 'SERVER_URL' # https://...
+  PERSONAL_ACCESS_TOKEN = 'TOKEN' # Profile -> Settings -> Personal Access Tokens
+  SPACE_KEY = '~username'
+EOF
+  exit(-1)
+end
+
+load SETTINGS
+
+unless defined?(CONFLUENCE_SERVER) && defined?(PERSONAL_ACCESS_TOKEN) && defined?(SPACE_KEY)
+  $stderr.puts "Invalid settings in #{SETTINGS}."
+  exit(-1)
+end
+
+if ARGV.size != 1
+  $stderr.puts "Missing argument: path to Markdown file to push to Confluence"
+  exit(-1)
+end
+
+file = ARGV[0]
+unless File.exist?(file) && File.readable?(file)
+  $stderr.puts "Cannot read file #{file}"
+  exit(-1)
+end
+
+require 'yaml'
+require 'json'
+require 'redcarpet'
+require 'rest-client'
+require_relative 'markdown_file'
+
+Encoding.default_internal = Encoding::UTF_8
+Encoding.default_external = Encoding::UTF_8
+
+document = MarkdownFile.new(file)
+
+page_id = document.front_matter['confluence-page-id']
+if page_id.nil?
+  $stderr.puts 'File is missing a "confluence-page-id" front-matter property.'
+  exit(-1)
+end
+
+page_url = "#{CONFLUENCE_SERVER}/rest/api/content/#{page_id}"
+
+response = RestClient.get("#{page_url}?expand=version.number", authorization: "Bearer #{PERSONAL_ACCESS_TOKEN}")
+if response.code != 200
+  $stderr.puts "Couldn't locate page in Confluence. Error: #{response.code}"
+  $stderr.puts response
+  exit(-1)
+end
+version = JSON.parse(response.body)['version']['number'] + 1
+
+markdown = Redcarpet::Markdown.new(Redcarpet::Render::XHTML,
+                                   :no_intra_emphasis => true,
+                                   :tables => true,
+                                   :fenced_code_blocks => true,
+                                   :footnotes => true)
+xhtml = markdown.render(document.text)
+warning_message = '<ac:structured-macro ac:name="warning" ac:schema-version="1"><ac:rich-text-body>
+<p><strong>Do not bother editing this page!</strong></p><p>It is overwritten automatically from time to time, from an external source.</p>
+<p>You <em>can</em> add page-level comments if you so desire.</p></ac:rich-text-body></ac:structured-macro>'
+
+payload = {
+  id: page_id,
+  type: 'page',
+  title: document.title,
+  space: { key: SPACE_KEY },
+  body: {
+    storage: {
+      value: warning_message + xhtml,
+      representation: 'storage'
+    }
+  },
+  version: { number: version }
+}
+
+response = RestClient.put(page_url, payload.to_json, {
+  authorization: "Bearer #{PERSONAL_ACCESS_TOKEN}",
+  content_type: 'application/json'
+})
+
+if response.code != 200
+  $stderr.puts "Couldn't update page in Confluence. Error: #{response.code}"
+  $stderr.puts response.body
+  exit(-1)
+end
+
+puts "Pushed document '#{document.title}', version #{version}"
