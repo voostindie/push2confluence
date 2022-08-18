@@ -8,14 +8,14 @@ Here's a template:
 
   CONFLUENCE_SERVER = 'SERVER_URL' # https://...
   PERSONAL_ACCESS_TOKEN = 'TOKEN' # Profile -> Settings -> Personal Access Tokens
-  SPACE_KEY = '~username'
+  DEFAULT_SPACE_KEY = '~username'
 EOF
   exit(-1)
 end
 
 load SETTINGS
 
-unless defined?(CONFLUENCE_SERVER) && defined?(PERSONAL_ACCESS_TOKEN) && defined?(SPACE_KEY)
+unless defined?(CONFLUENCE_SERVER) && defined?(PERSONAL_ACCESS_TOKEN) && defined?(DEFAULT_SPACE_KEY)
   $stderr.puts "Invalid settings in #{SETTINGS}."
   exit(-1)
 end
@@ -47,6 +47,7 @@ if page_id.nil?
   $stderr.puts 'File is missing a "confluence-page-id" front-matter property.'
   exit(-1)
 end
+space_key = document.front_matter['confluence-space-key'] || DEFAULT_SPACE_KEY
 
 page_url = "#{CONFLUENCE_SERVER}/rest/api/content/#{page_id}"
 
@@ -72,7 +73,7 @@ payload = {
   id: page_id,
   type: 'page',
   title: document.title,
-  space: { key: SPACE_KEY },
+  space: { key: space_key },
   body: {
     storage: {
       value: warning_message + xhtml,

@@ -13,7 +13,7 @@ Create a file `~/.confluence` with:
 ```ruby
 CONFLUENCE_SERVER = 'https://confluence.my.domain'
 PERSONAL_ACCESS_TOKEN = 'my_personal_token' # Profile -> Settings -> Personal Access Tokens
-SPACE_KEY = '~username'
+DEFAULT_SPACE_KEY = '~username'
 ```
 
 ## What does "properly annotated Markdown" mean?
@@ -21,7 +21,8 @@ SPACE_KEY = '~username'
 - The Markdown file must have a YAML front matter section.
 - The front matter must have a property `confluence-page-id`
 - The property must refer to an existing page ID in Confluence.
-- The page must exist in the Confluence space with key `SPACE_KEY`.
+- If the front matter has a property `confluence-space-key`, then it will be used instead of the default.
+- The page must exist in the selected Confluence space.
 
 ## How to get a valid page ID
 
